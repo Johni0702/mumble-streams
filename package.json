@@ -1,0 +1,22 @@
+{
+  "name": "mumble-streams",
+  "version": "0.0.1",
+  "description": "Collection of streams for handling the Mumble protocol",
+  "main": "index.js",
+  "scripts": {
+    "test": "./node_modules/mocha/bin/mocha test/**/*.js"
+  },
+  "author": "johni0702 <me@johni0702.de>",
+  "license": "ISC",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "protobufjs": "^5.0.1"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^2.5.3"
+  }
+}
