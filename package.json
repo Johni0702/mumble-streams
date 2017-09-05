@@ -1,6 +1,6 @@
 {
   "name": "mumble-streams",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Collection of streams for handling the Mumble protocol",
   "main": "index.js",
   "scripts": {
