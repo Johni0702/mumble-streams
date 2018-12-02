@@ -1,4 +1,4 @@
-// Copyright 2005-2016 The Mumble Developers. All rights reserved.
+// Copyright 2005-2018 The Mumble Developers. All rights reserved.
 // Use of this source code is governed by a BSD-style license
 // that can be found in the LICENSE file at the root of the
 // Mumble source tree or at <https://www.mumble.info/LICENSE>.
@@ -35,6 +35,8 @@ message Authenticate {
 	// A list of CELT bitstream version constants supported by the client.
 	repeated int32 celt_versions = 4;
 	optional bool opus = 5 [default = false];
+	// Whether to use WebRTC instead of native UDP packets.
+	optional bool webrtc = 6 [default = false];
 }
 
 // Sent by the client to notify the server that the client is still alive.
@@ -211,6 +213,13 @@ message UserState {
 	optional bool priority_speaker = 18;
 	// True if the user is currently recording.
 	optional bool recording = 19;
+	// Unique SSRC from which the user's audio is sent when using WebRTC.
+	//
+	// As opposed to `session`, this value must not be monotonically increasing
+	// but must instead be re-used where possible (i.e. after a user disconnects).
+	// The WebRTC implementation must keep track of all SSRCs ever used for the
+	// entirety of the WebRTC session, so that number needs to be kept low.
+	optional uint32 ssrc = 20;
 }
 
 // Relays information on the bans. The client may send the BanList message to
@@ -558,4 +567,69 @@ message SuggestConfig {
 	optional bool positional = 2;
 	// True if the administrator suggests push to talk to be used on this server.
 	optional bool push_to_talk = 3;
+}
+
+// Used to exchange WebRTC session details between client and server.
+// The client may only send these if it received one from the server beforehand.
+// The server may only send these if the client has indicated its support in
+// the `webrtc` field of the `Authenticate` message and, if the server chooses to
+// support WebRTC for the client, it MUST send the message right after receiving
+// the `Authenticate` message, before any other message (especially before any
+// `UserState`, `TalkingState` or `IceCandidate` messages).
+//
+// No actual SDP is exchanged, it is instead built separately by both, the client
+// and the server, on every user join/part.
+// All audio is bundled via "a=group:BUNDLE audio$ssrc ..." over a single
+// DTLS-SRTP over ICE connection.
+// The client should be in controlling mode for ICE, the server should act as
+// the server/passive for DTLS and as the offerer for WebRTC.
+// Note:
+//   WebRTC demands the offerer to offer both active and passive modes "actpass".
+//   The client should modify the browser's answer to use the correct one before applying it.
+//
+// Global parameters (ice_pwd, ice_ufrag and dtls_fingerprint) are sent via an initial
+// `WebRTC` packet. Transmitting further `WebRTC` packets should trigger ICE-restarts.
+//
+// There needs to be one unidirectional media section per connected user. The
+// SSRC for each media section is sent with the initial `UserState` message.
+//
+// SDP for each media segment:
+//   m=audio 0 UDP/TLS/RTP/SAVPF 97
+//   c=IN IP4 0.0.0.0
+//   a=fingerprint:sha-256 $dtls_fingerprint
+//   a=ice-pwd:$ice_pwd
+//   a=ice-ufrag:$ice_ufrag
+//   a=rtpmap:97 OPUS/48000/2
+//   a=rtcp-mux
+//   a=setup:actpass
+//   a=bundle-only
+//   a=ssrc:$ssrc cname:audio$ssrc
+//
+// There also needs to be one unidirectional media section which describes
+// the stream containing the client's voice. This section's SDP is similar
+// to the above one except in the opposite direction (e.g. different ice and
+// dtls credentials) und no specific SSRC (considering how the server chooses
+// SSRCs for its users, 0xffffffff should be a safe bet to prevent collisions).
+message WebRTC {
+	optional string ice_pwd = 1;
+	optional string ice_ufrag = 2;
+	optional string dtls_fingerprint = 3;
+}
+
+// Used to exchange ICE candidates.
+message IceCandidate {
+	required string content = 1;
+}
+
+// Indicates whether a user is currently talking (or whispering or shouting).
+// Also used to set own talking state.
+// Only sent when WebRTC is used, otherwise this information can be deduced
+// from the UDP packets.
+message TalkingState {
+	// User whose state this is
+	optional uint32 session = 1;
+	// Target, as used in UDP packets:
+	// Clientbound: 0 is normal talking, 1 is shout, 2 is whisper, 31 is server loopback
+	// Serverbound: 0 is normal talking, 1-30 as per VoiceTarget, 31 is server loopback
+	optional uint32 target = 2;
 }
